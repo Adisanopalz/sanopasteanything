@@ -92,6 +92,15 @@
             z-index: -1;
             opacity: 0.5;
         }
+
+        /* Modal Image Transition */
+        #modal-image {
+            transition: transform 0.1s ease-out; /* Smoother for zoom */
+            cursor: grab;
+        }
+        #modal-image:active {
+            cursor: grabbing;
+        }
     </style>
 </head>
 <body class="antialiased transition-colors duration-500 bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-x-hidden min-h-screen">
@@ -175,6 +184,39 @@
         </div>
     </div>
 
+    <!-- IMAGE PREVIEW MODAL (LIGHTBOX) -->
+    <div id="image-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-slate-950/90 backdrop-blur-md transition-opacity" onclick="closeModal()"></div>
+        
+        <!-- Controls: Top Right -->
+        <div class="absolute top-4 right-4 z-[110] flex gap-2">
+            <button onclick="closeModal()" class="p-2.5 rounded-full bg-slate-800/50 text-white hover:bg-slate-700 transition-colors border border-white/10">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+
+        <!-- Content -->
+        <div class="relative z-[105] w-full h-full flex items-center justify-center overflow-hidden p-4">
+            <img id="modal-image" src="" class="max-w-full max-h-full object-contain shadow-2xl rounded-sm" alt="Preview">
+        </div>
+
+        <!-- Controls: Bottom (Zoom) -->
+        <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-[110] flex gap-2 p-2 rounded-xl bg-slate-900/80 border border-white/10 backdrop-blur-md shadow-xl">
+            <button onclick="zoom(-0.2)" class="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors">
+                <i data-lucide="minus" class="w-5 h-5"></i>
+            </button>
+            <span id="zoom-level" class="text-xs font-mono text-slate-400 flex items-center w-12 justify-center">100%</span>
+            <button onclick="zoom(0.2)" class="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors">
+                <i data-lucide="plus" class="w-5 h-5"></i>
+            </button>
+            <div class="w-px bg-white/10 mx-1"></div>
+            <button onclick="resetZoom()" class="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors" title="Reset Zoom">
+                <i data-lucide="refresh-ccw" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
     <script>
         // --- 1. State & Initialization ---
         const historyList = document.getElementById('history-list');
@@ -182,7 +224,6 @@
         const dropZone = document.getElementById('drop-zone');
         const hiddenInput = document.getElementById('hidden-input');
         
-        // Cek jika ada data di localStorage (opsional, untuk persistensi sederhana)
         let items = [];
 
         // Inisialisasi Icons
@@ -192,7 +233,6 @@
         const themeToggle = document.getElementById('theme-toggle');
         const html = document.documentElement;
 
-        // Check system preference initially
         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             html.classList.add('dark');
         } else {
@@ -209,20 +249,18 @@
         });
 
         // --- 3. Core Logic: Handling Paste & Drop ---
-
-        // Focus trap untuk memastikan Ctrl+V bekerja
         document.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
                 hiddenInput.focus();
             }
+            // Escape to close modal
+            if (e.key === 'Escape') closeModal();
         });
 
-        // Global Paste Listener
         window.addEventListener('paste', (e) => {
             handleDataTransfer(e.clipboardData);
         });
 
-        // Drag & Drop Handlers
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
         });
@@ -240,10 +278,8 @@
             handleDataTransfer(e.dataTransfer);
         });
 
-        // Processor Data
         function handleDataTransfer(data) {
             if (!data) return;
-
             const itemsList = data.items;
             let processed = false;
 
@@ -257,9 +293,10 @@
                             addItem({
                                 id: Date.now(),
                                 type: 'image',
-                                content: e.target.result, // Base64
+                                content: e.target.result, 
                                 timestamp: new Date(),
-                                meta: `${file.name || 'Image'} (${formatBytes(file.size)})`
+                                meta: `${file.name || 'Image'} (${formatBytes(file.size)})`,
+                                rawType: file.type // Needed for download extension
                             });
                         };
                         reader.readAsDataURL(file);
@@ -268,9 +305,8 @@
                 }
             }
 
-            // 2. Cek Text jika tidak ada file yang diproses
+            // 2. Cek Text
             if (!processed) {
-                // Gunakan getData untuk text murni
                 const text = data.getData('text');
                 if (text && text.trim().length > 0) {
                     addItem({
@@ -278,16 +314,16 @@
                         type: 'text',
                         content: text,
                         timestamp: new Date(),
-                        meta: `${text.length} karakter`
+                        meta: `${text.length} karakter`,
+                        rawType: 'text/plain'
                     });
                 }
             }
         }
 
         // --- 4. Render & UI Logic ---
-
         function addItem(item) {
-            items.unshift(item); // Add to top
+            items.unshift(item); 
             renderItem(item);
             checkEmpty();
             showToast("Item berhasil ditambahkan");
@@ -328,18 +364,14 @@
             div.id = `item-${item.id}`;
             div.className = 'glass-panel rounded-xl p-4 md:p-5 relative group animate-slide-up transition-all hover:border-indigo-500/30';
             
-            // Format Timestamp
             const timeString = item.timestamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
             
-            // Content Generation based on Type
             let contentHTML = '';
             let iconType = '';
 
             if (item.type === 'text') {
                 iconType = 'type';
-                // Truncate text for display but keep full for copy
                 const displayContent = item.content.length > 300 ? item.content.substring(0, 300) + '...' : item.content;
-                // Escape HTML logic for safety
                 const safeContent = displayContent.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 
                 contentHTML = `
@@ -349,9 +381,11 @@
                 `;
             } else if (item.type === 'image') {
                 iconType = 'image';
+                // Note: Added cursor-zoom-in and onclick handler
                 contentHTML = `
-                    <div class="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900/50 mt-2">
-                        <img src="${item.content}" class="max-h-60 w-auto object-contain mx-auto" alt="Pasted Image">
+                    <div class="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900/50 mt-2 relative group/image">
+                        <img src="${item.content}" onclick="openModal('${item.content}')" class="max-h-60 w-auto object-contain mx-auto cursor-zoom-in transition-transform duration-300 group-hover/image:scale-[1.02]" alt="Pasted Image">
+                        <div class="absolute inset-0 bg-black/0 group-hover/image:bg-black/10 transition-colors pointer-events-none"></div>
                     </div>
                 `;
             }
@@ -371,27 +405,103 @@
                 ${contentHTML}
 
                 <div class="mt-4 flex gap-2 justify-end opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button onclick="copyContent(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-500/20 transition-colors">
-                        <i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin
+                     <!-- Download Button -->
+                    <button onclick="downloadItem(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-500/10 text-slate-600 dark:text-slate-400 rounded-md hover:bg-slate-500/20 transition-colors" title="Download">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Unduh</span>
                     </button>
-                    <button onclick="deleteItem(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-colors">
-                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus
+                    <!-- Copy Button -->
+                    <button onclick="copyContent(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-500/20 transition-colors" title="Copy to Clipboard">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Salin</span>
+                    </button>
+                    <!-- Delete Button -->
+                    <button onclick="deleteItem(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-colors" title="Delete">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Hapus</span>
                     </button>
                 </div>
             `;
 
-            // Insert after empty state or at top
-            if (historyList.children.length > 1) { // 1 is empty state
-                historyList.insertBefore(div, historyList.children[1]); // Insert after empty-state div
+            if (historyList.children.length > 1) { 
+                historyList.insertBefore(div, historyList.children[1]); 
             } else {
                 historyList.appendChild(div);
             }
 
-            // Re-init icons for new elements
             lucide.createIcons();
         }
 
-        // --- 5. Helper Functions ---
+        // --- 5. Modal & Zoom Logic ---
+        const modal = document.getElementById('image-modal');
+        const modalImg = document.getElementById('modal-image');
+        const zoomLevelText = document.getElementById('zoom-level');
+        let currentZoom = 1;
+
+        function openModal(src) {
+            modalImg.src = src;
+            modal.classList.remove('hidden');
+            resetZoom();
+            document.body.style.overflow = 'hidden'; // Prevent scroll
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            document.body.style.overflow = ''; // Restore scroll
+            setTimeout(() => { modalImg.src = ''; }, 200); // Clear src after fade
+        }
+
+        function zoom(delta) {
+            currentZoom += delta;
+            // Limit zoom
+            if (currentZoom < 0.5) currentZoom = 0.5;
+            if (currentZoom > 5.0) currentZoom = 5.0;
+            
+            updateZoomTransform();
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            updateZoomTransform();
+        }
+
+        function updateZoomTransform() {
+            modalImg.style.transform = `scale(${currentZoom})`;
+            zoomLevelText.innerText = `${Math.round(currentZoom * 100)}%`;
+        }
+
+        // Scroll to zoom inside modal
+        modal.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            zoom(delta);
+        });
+
+
+        // --- 6. Helper Functions (Download, Copy, etc) ---
+
+        function downloadItem(id) {
+            const item = items.find(i => i.id === id);
+            if (!item) return;
+
+            const link = document.createElement('a');
+            
+            if (item.type === 'image') {
+                link.href = item.content; // Base64 url
+                // Guess extension based on header or default to png
+                let ext = 'png';
+                if (item.content.includes('image/jpeg')) ext = 'jpg';
+                if (item.content.includes('image/webp')) ext = 'webp';
+                link.download = `sanopaste-image-${item.id}.${ext}`;
+            } else {
+                // For text, create a blob
+                const blob = new Blob([item.content], { type: 'text/plain' });
+                link.href = URL.createObjectURL(blob);
+                link.download = `sanopaste-text-${item.id}.txt`;
+            }
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Item berhasil diunduh");
+        }
 
         function copyContent(id) {
             const item = items.find(i => i.id === id);
@@ -402,9 +512,6 @@
                     showToast("Teks disalin ke clipboard");
                 });
             } else if (item.type === 'image') {
-                // Untuk gambar, kita bisa copy blob ke clipboard atau (lebih mudah untuk web) beritahu user
-                // Copy image to clipboard is tricky in pure JS without HTTPS context sometimes,
-                // so we attempt standard fetch -> blob -> clipboard item
                 fetch(item.content)
                     .then(res => res.blob())
                     .then(blob => {
@@ -423,10 +530,8 @@
         function showToast(message) {
             const toast = document.getElementById('toast');
             const toastMsg = document.getElementById('toast-message');
-            
             toastMsg.innerText = message;
             toast.classList.remove('translate-y-20', 'opacity-0');
-            
             setTimeout(() => {
                 toast.classList.add('translate-y-20', 'opacity-0');
             }, 3000);
@@ -441,7 +546,6 @@
             return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
         }
 
-        // Initialize empty check
         checkEmpty();
 
     </script>
