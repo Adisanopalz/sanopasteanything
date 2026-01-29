@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanopaste: Anything</title>
+    
+    <!-- Fonts: Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Configuration for Colors & Fonts -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#151f32', // Deep background
+                            950: '#020617',
+                        },
+                        indigo: {
+                            450: '#6366f1',
+                        }
+                    },
+                    animation: {
+                        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom Scrollbar for Chrome, Safari and Opera */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .dark .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .light .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            backdrop-filter: blur(20px);
+        }
+
+        /* Gradient Orb Animation Background */
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: -1;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body class="antialiased transition-colors duration-500 bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-x-hidden min-h-screen">
+
+    <!-- Ambient Background Orbs -->
+    <div class="orb w-[500px] h-[500px] bg-indigo-500/20 top-[-100px] left-[-100px] animate-pulse-slow"></div>
+    <div class="orb w-[400px] h-[400px] bg-violet-500/20 bottom-[-50px] right-[-50px] animate-pulse-slow" style="animation-delay: 1.5s;"></div>
+
+    <!-- Main Container -->
+    <div class="max-w-3xl mx-auto px-4 py-8 md:py-12 min-h-screen flex flex-col">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-10 animate-slide-up">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
+                    <i data-lucide="clipboard-copy" class="text-indigo-500 w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-violet-500">sanopaste</h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Anything. Instantly.</p>
+                </div>
+            </div>
+            
+            <button id="theme-toggle" class="p-2.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors duration-300 focus:outline-none">
+                <i data-lucide="moon" class="w-5 h-5 hidden dark:block text-slate-400"></i>
+                <i data-lucide="sun" class="w-5 h-5 block dark:hidden text-orange-400"></i>
+            </button>
+        </header>
+
+        <!-- Drop Zone / Input Area -->
+        <div id="drop-zone" class="relative group cursor-pointer mb-12 animate-slide-up" style="animation-delay: 0.1s;">
+            <!-- Glow Effect on Hover -->
+            <div class="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-violet-600 rounded-2xl blur opacity-20 group-hover:opacity-60 transition duration-500"></div>
+            
+            <div class="relative glass-panel rounded-2xl p-10 md:p-16 text-center transition-all duration-300 group-hover:transform group-hover:scale-[1.01]">
+                <input type="text" id="hidden-input" class="absolute opacity-0 w-full h-full top-0 left-0 cursor-pointer" autocomplete="off">
+                
+                <div class="flex flex-col items-center justify-center gap-4">
+                    <div class="p-4 bg-slate-100 dark:bg-slate-800/50 rounded-full mb-2 group-hover:bg-indigo-500/10 transition-colors">
+                        <i data-lucide="plus" class="w-8 h-8 text-slate-400 group-hover:text-indigo-500 transition-colors"></i>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-semibold text-slate-700 dark:text-slate-200">
+                        Paste atau Drop file di sini
+                    </h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                        Tekan <kbd class="px-2 py-1 text-xs font-semibold text-slate-800 bg-slate-200 border border-slate-300 rounded-lg dark:bg-slate-700 dark:text-slate-100 dark:border-slate-500 mx-1">Ctrl + V</kbd> untuk menyimpan teks, gambar, atau kode secara instan.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- History List Header -->
+        <div class="flex items-center justify-between mb-4 px-2 animate-slide-up" style="animation-delay: 0.2s;">
+            <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Riwayat Sesi</h3>
+            <button onclick="clearAll()" class="text-xs text-red-400 hover:text-red-500 transition-colors font-medium hover:underline">
+                Hapus Semua
+            </button>
+        </div>
+
+        <!-- History Container -->
+        <div id="history-list" class="flex flex-col gap-4 flex-grow pb-10">
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-12 animate-slide-up hidden" style="animation-delay: 0.3s;">
+                <p class="text-slate-400 dark:text-slate-600 text-sm italic">Belum ada item yang disimpan.</p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-auto pt-6 border-t border-slate-200 dark:border-slate-800/50 text-center animate-slide-up" style="animation-delay: 0.4s;">
+            <p class="text-xs text-slate-400 dark:text-slate-500">
+                &copy; 2024 Sanopaste. Local browser storage only.
+            </p>
+        </footer>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <div class="glass-panel bg-slate-900/90 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 border border-slate-700">
+            <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+            <span id="toast-message" class="text-sm font-medium">Berhasil disalin!</span>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. State & Initialization ---
+        const historyList = document.getElementById('history-list');
+        const emptyState = document.getElementById('empty-state');
+        const dropZone = document.getElementById('drop-zone');
+        const hiddenInput = document.getElementById('hidden-input');
+        
+        // Cek jika ada data di localStorage (opsional, untuk persistensi sederhana)
+        let items = [];
+
+        // Inisialisasi Icons
+        lucide.createIcons();
+
+        // --- 2. Theme Handling ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+
+        // Check system preference initially
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            html.classList.add('dark');
+        } else {
+            html.classList.remove('dark');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            html.classList.toggle('dark');
+            if (html.classList.contains('dark')) {
+                localStorage.theme = 'dark';
+            } else {
+                localStorage.theme = 'light';
+            }
+        });
+
+        // --- 3. Core Logic: Handling Paste & Drop ---
+
+        // Focus trap untuk memastikan Ctrl+V bekerja
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                hiddenInput.focus();
+            }
+        });
+
+        // Global Paste Listener
+        window.addEventListener('paste', (e) => {
+            handleDataTransfer(e.clipboardData);
+        });
+
+        // Drag & Drop Handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        dropZone.addEventListener('dragenter', () => dropZone.classList.add('scale-[1.02]'));
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('scale-[1.02]'));
+        
+        dropZone.addEventListener('drop', (e) => {
+            dropZone.classList.remove('scale-[1.02]');
+            handleDataTransfer(e.dataTransfer);
+        });
+
+        // Processor Data
+        function handleDataTransfer(data) {
+            if (!data) return;
+
+            const itemsList = data.items;
+            let processed = false;
+
+            // 1. Cek Files (Images)
+            for (let i = 0; i < itemsList.length; i++) {
+                if (itemsList[i].kind === 'file') {
+                    const file = itemsList[i].getAsFile();
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            addItem({
+                                id: Date.now(),
+                                type: 'image',
+                                content: e.target.result, // Base64
+                                timestamp: new Date(),
+                                meta: `${file.name || 'Image'} (${formatBytes(file.size)})`
+                            });
+                        };
+                        reader.readAsDataURL(file);
+                        processed = true;
+                    }
+                }
+            }
+
+            // 2. Cek Text jika tidak ada file yang diproses
+            if (!processed) {
+                // Gunakan getData untuk text murni
+                const text = data.getData('text');
+                if (text && text.trim().length > 0) {
+                    addItem({
+                        id: Date.now(),
+                        type: 'text',
+                        content: text,
+                        timestamp: new Date(),
+                        meta: `${text.length} karakter`
+                    });
+                }
+            }
+        }
+
+        // --- 4. Render & UI Logic ---
+
+        function addItem(item) {
+            items.unshift(item); // Add to top
+            renderItem(item);
+            checkEmpty();
+            showToast("Item berhasil ditambahkan");
+        }
+
+        function deleteItem(id) {
+            items = items.filter(i => i.id !== id);
+            const el = document.getElementById(`item-${id}`);
+            if (el) {
+                el.style.opacity = '0';
+                el.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    el.remove();
+                    checkEmpty();
+                }, 300);
+            }
+        }
+
+        function clearAll() {
+            if(confirm('Hapus semua histori?')) {
+                items = [];
+                historyList.innerHTML = '';
+                historyList.appendChild(emptyState);
+                checkEmpty();
+            }
+        }
+
+        function checkEmpty() {
+            if (items.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+            }
+        }
+
+        function renderItem(item) {
+            const div = document.createElement('div');
+            div.id = `item-${item.id}`;
+            div.className = 'glass-panel rounded-xl p-4 md:p-5 relative group animate-slide-up transition-all hover:border-indigo-500/30';
+            
+            // Format Timestamp
+            const timeString = item.timestamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            
+            // Content Generation based on Type
+            let contentHTML = '';
+            let iconType = '';
+
+            if (item.type === 'text') {
+                iconType = 'type';
+                // Truncate text for display but keep full for copy
+                const displayContent = item.content.length > 300 ? item.content.substring(0, 300) + '...' : item.content;
+                // Escape HTML logic for safety
+                const safeContent = displayContent.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                
+                contentHTML = `
+                    <div class="font-mono text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words leading-relaxed max-h-32 overflow-hidden relative">
+                        ${safeContent}
+                    </div>
+                `;
+            } else if (item.type === 'image') {
+                iconType = 'image';
+                contentHTML = `
+                    <div class="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900/50 mt-2">
+                        <img src="${item.content}" class="max-h-60 w-auto object-contain mx-auto" alt="Pasted Image">
+                    </div>
+                `;
+            }
+
+            div.innerHTML = `
+                <div class="flex items-start justify-between gap-4 mb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="p-1.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-500">
+                            <i data-lucide="${iconType}" class="w-4 h-4"></i>
+                        </div>
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">${item.type}</span>
+                        <span class="text-xs text-slate-400">• ${item.meta}</span>
+                    </div>
+                    <span class="text-xs text-slate-400 font-mono">${timeString}</span>
+                </div>
+
+                ${contentHTML}
+
+                <div class="mt-4 flex gap-2 justify-end opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <button onclick="copyContent(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-500/20 transition-colors">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin
+                    </button>
+                    <button onclick="deleteItem(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-colors">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus
+                    </button>
+                </div>
+            `;
+
+            // Insert after empty state or at top
+            if (historyList.children.length > 1) { // 1 is empty state
+                historyList.insertBefore(div, historyList.children[1]); // Insert after empty-state div
+            } else {
+                historyList.appendChild(div);
+            }
+
+            // Re-init icons for new elements
+            lucide.createIcons();
+        }
+
+        // --- 5. Helper Functions ---
+
+        function copyContent(id) {
+            const item = items.find(i => i.id === id);
+            if (!item) return;
+
+            if (item.type === 'text') {
+                navigator.clipboard.writeText(item.content).then(() => {
+                    showToast("Teks disalin ke clipboard");
+                });
+            } else if (item.type === 'image') {
+                // Untuk gambar, kita bisa copy blob ke clipboard atau (lebih mudah untuk web) beritahu user
+                // Copy image to clipboard is tricky in pure JS without HTTPS context sometimes,
+                // so we attempt standard fetch -> blob -> clipboard item
+                fetch(item.content)
+                    .then(res => res.blob())
+                    .then(blob => {
+                        const item = new ClipboardItem({ [blob.type]: blob });
+                        navigator.clipboard.write([item]).then(() => {
+                            showToast("Gambar disalin ke clipboard");
+                        });
+                    })
+                    .catch(err => {
+                        console.error('Gagal copy image:', err);
+                        showToast("Gagal menyalin gambar (Browser restriction)");
+                    });
+            }
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            
+            toastMsg.innerText = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        // Initialize empty check
+        checkEmpty();
+
+    </script>
+</body>
+</html>
