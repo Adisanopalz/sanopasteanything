@@ -154,7 +154,10 @@
 
         <!-- History List Header -->
         <div class="flex items-center justify-between mb-4 px-2 animate-slide-up" style="animation-delay: 0.2s;">
-            <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Riwayat Sesi</h3>
+            <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Riwayat Sesi</h3>
+                <span id="storage-status" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500">Storage: 0%</span>
+            </div>
             <button onclick="clearAll()" class="text-xs text-red-400 hover:text-red-500 transition-colors font-medium hover:underline">
                 Hapus Semua
             </button>
@@ -171,15 +174,15 @@
         <!-- Footer -->
         <footer class="mt-auto pt-6 border-t border-slate-200 dark:border-slate-800/50 text-center animate-slide-up" style="animation-delay: 0.4s;">
             <p class="text-xs text-slate-400 dark:text-slate-500">
-                &copy; 2024 Sanopaste. Local browser storage only.
+                &copy; 2024 Sanopaste. Local browser storage enabled.
             </p>
         </footer>
     </div>
 
     <!-- Notification Toast -->
     <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
-        <div class="glass-panel bg-slate-900/90 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 border border-slate-700">
-            <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+        <div id="toast-bg" class="glass-panel bg-slate-900/90 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 border border-slate-700">
+            <i id="toast-icon" data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
             <span id="toast-message" class="text-sm font-medium">Berhasil disalin!</span>
         </div>
     </div>
@@ -226,6 +229,72 @@
         
         let items = [];
 
+        // Load items from localStorage on Startup
+        function loadItems() {
+            const saved = localStorage.getItem('sanopaste_items');
+            if (saved) {
+                try {
+                    items = JSON.parse(saved);
+                    // Convert string dates back to Date objects
+                    items.forEach(i => i.timestamp = new Date(i.timestamp));
+                    
+                    // Render in reverse order (oldest first in loop) to maintain stack order visually
+                    // because renderItem inserts at top (insertBefore)
+                    // The array is [Newest, ..., Oldest]
+                    // If we loop normal: Newest renders (top), then Older renders (above Newest) -> Wrong.
+                    // So we must loop in reverse: Oldest renders, then Newer renders (above Oldest).
+                    const itemsToRender = [...items].reverse();
+                    itemsToRender.forEach(item => renderItem(item));
+                    
+                } catch (e) {
+                    console.error("Gagal memuat history:", e);
+                    localStorage.removeItem('sanopaste_items');
+                }
+            }
+            checkEmpty();
+            updateStorageUsage();
+        }
+
+        function saveItems() {
+            try {
+                const stringData = JSON.stringify(items);
+                localStorage.setItem('sanopaste_items', stringData);
+                updateStorageUsage();
+                return true;
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    showToast("Penyimpanan Penuh! Hapus beberapa item.", 'error');
+                    // Remove the item that caused the overflow (the last added one, which is at index 0)
+                    items.shift(); 
+                    // Remove visual element
+                    if (historyList.children.length > 1) {
+                         // children[1] is the newest item because children[0] is empty-state
+                         historyList.children[1].remove();
+                    }
+                    return false;
+                }
+                console.error("Error saving:", e);
+                return false;
+            }
+        }
+
+        // Calculate rough storage usage
+        function updateStorageUsage() {
+            let total = 0;
+            if (localStorage.getItem('sanopaste_items')) {
+                total = localStorage.getItem('sanopaste_items').length * 2; // ~2 bytes per char
+            }
+            // Standard limit ~5MB = 5,242,880 bytes
+            const limit = 5 * 1024 * 1024;
+            const percentage = Math.min((total / limit) * 100, 100).toFixed(1);
+            
+            const statusEl = document.getElementById('storage-status');
+            statusEl.innerText = `Storage: ${percentage}%`;
+            
+            if (percentage > 90) statusEl.classList.add('text-red-500');
+            else statusEl.classList.remove('text-red-500');
+        }
+
         // Inisialisasi Icons
         lucide.createIcons();
 
@@ -253,7 +322,6 @@
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
                 hiddenInput.focus();
             }
-            // Escape to close modal
             if (e.key === 'Escape') closeModal();
         });
 
@@ -296,7 +364,7 @@
                                 content: e.target.result, 
                                 timestamp: new Date(),
                                 meta: `${file.name || 'Image'} (${formatBytes(file.size)})`,
-                                rawType: file.type // Needed for download extension
+                                rawType: file.type
                             });
                         };
                         reader.readAsDataURL(file);
@@ -323,14 +391,23 @@
 
         // --- 4. Render & UI Logic ---
         function addItem(item) {
+            // Add to array
             items.unshift(item); 
-            renderItem(item);
-            checkEmpty();
-            showToast("Item berhasil ditambahkan");
+            
+            // Try to save first, if fail (full), logic in saveItems will handle rollback
+            const saved = saveItems();
+            
+            if (saved) {
+                renderItem(item);
+                checkEmpty();
+                showToast("Item berhasil disimpan");
+            }
         }
 
         function deleteItem(id) {
             items = items.filter(i => i.id !== id);
+            saveItems(); // Sync to storage
+            
             const el = document.getElementById(`item-${id}`);
             if (el) {
                 el.style.opacity = '0';
@@ -345,8 +422,17 @@
         function clearAll() {
             if(confirm('Hapus semua histori?')) {
                 items = [];
-                historyList.innerHTML = '';
-                historyList.appendChild(emptyState);
+                saveItems(); // Sync to storage
+                
+                // Remove all items except empty state
+                // Loop backwards to safely remove children
+                const children = Array.from(historyList.children);
+                children.forEach(child => {
+                    if (child.id !== 'empty-state') {
+                        child.remove();
+                    }
+                });
+                
                 checkEmpty();
             }
         }
@@ -381,7 +467,6 @@
                 `;
             } else if (item.type === 'image') {
                 iconType = 'image';
-                // Note: Added cursor-zoom-in and onclick handler
                 contentHTML = `
                     <div class="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900/50 mt-2 relative group/image">
                         <img src="${item.content}" onclick="openModal('${item.content}')" class="max-h-60 w-auto object-contain mx-auto cursor-zoom-in transition-transform duration-300 group-hover/image:scale-[1.02]" alt="Pasted Image">
@@ -405,15 +490,12 @@
                 ${contentHTML}
 
                 <div class="mt-4 flex gap-2 justify-end opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                     <!-- Download Button -->
                     <button onclick="downloadItem(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-500/10 text-slate-600 dark:text-slate-400 rounded-md hover:bg-slate-500/20 transition-colors" title="Download">
                         <i data-lucide="download" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Unduh</span>
                     </button>
-                    <!-- Copy Button -->
                     <button onclick="copyContent(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-500/20 transition-colors" title="Copy to Clipboard">
                         <i data-lucide="copy" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Salin</span>
                     </button>
-                    <!-- Delete Button -->
                     <button onclick="deleteItem(${item.id})" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-colors" title="Delete">
                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Hapus</span>
                     </button>
@@ -439,21 +521,19 @@
             modalImg.src = src;
             modal.classList.remove('hidden');
             resetZoom();
-            document.body.style.overflow = 'hidden'; // Prevent scroll
+            document.body.style.overflow = 'hidden';
         }
 
         function closeModal() {
             modal.classList.add('hidden');
-            document.body.style.overflow = ''; // Restore scroll
-            setTimeout(() => { modalImg.src = ''; }, 200); // Clear src after fade
+            document.body.style.overflow = '';
+            setTimeout(() => { modalImg.src = ''; }, 200);
         }
 
         function zoom(delta) {
             currentZoom += delta;
-            // Limit zoom
             if (currentZoom < 0.5) currentZoom = 0.5;
             if (currentZoom > 5.0) currentZoom = 5.0;
-            
             updateZoomTransform();
         }
 
@@ -467,7 +547,6 @@
             zoomLevelText.innerText = `${Math.round(currentZoom * 100)}%`;
         }
 
-        // Scroll to zoom inside modal
         modal.addEventListener('wheel', (e) => {
             e.preventDefault();
             const delta = e.deltaY > 0 ? -0.1 : 0.1;
@@ -475,7 +554,7 @@
         });
 
 
-        // --- 6. Helper Functions (Download, Copy, etc) ---
+        // --- 6. Helper Functions ---
 
         function downloadItem(id) {
             const item = items.find(i => i.id === id);
@@ -484,14 +563,12 @@
             const link = document.createElement('a');
             
             if (item.type === 'image') {
-                link.href = item.content; // Base64 url
-                // Guess extension based on header or default to png
+                link.href = item.content;
                 let ext = 'png';
                 if (item.content.includes('image/jpeg')) ext = 'jpg';
                 if (item.content.includes('image/webp')) ext = 'webp';
                 link.download = `sanopaste-image-${item.id}.${ext}`;
             } else {
-                // For text, create a blob
                 const blob = new Blob([item.content], { type: 'text/plain' });
                 link.href = URL.createObjectURL(blob);
                 link.download = `sanopaste-text-${item.id}.txt`;
@@ -527,10 +604,24 @@
             }
         }
 
-        function showToast(message) {
+        function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             const toastMsg = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+            
             toastMsg.innerText = message;
+            
+            if (type === 'error') {
+                toastIcon.classList.remove('text-green-400');
+                toastIcon.classList.add('text-red-400');
+                toastIcon.setAttribute('data-lucide', 'alert-circle');
+            } else {
+                toastIcon.classList.remove('text-red-400');
+                toastIcon.classList.add('text-green-400');
+                toastIcon.setAttribute('data-lucide', 'check-circle');
+            }
+            lucide.createIcons();
+
             toast.classList.remove('translate-y-20', 'opacity-0');
             setTimeout(() => {
                 toast.classList.add('translate-y-20', 'opacity-0');
@@ -546,7 +637,8 @@
             return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
         }
 
-        checkEmpty();
+        // --- Start App ---
+        loadItems(); // Initial Load
 
     </script>
 </body>
